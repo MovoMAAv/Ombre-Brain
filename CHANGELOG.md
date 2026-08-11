@@ -2,6 +2,22 @@
 
 本项目版本号见根目录 `VERSION` 文件，Docker 镜像 tag 与之对应（`p0luz/ombre-brain:<VERSION>`）。
 
+## 2.18.0
+
+### 新增 / Added
+
+- 为 ChatGPT / Codex 增加按对话启用的 `OB_DAILY_MEMORY=ON` 日常记忆授权层。MCP 初始化 instructions 会指导模型使用现有 `grow` 写入新内容，并在同一事件、计划或人物出现后续进展时先检索、再用 `trace` 更新精确桶。
+- 花园小机可按模型自己的“机友”分类，使用稳定 `garden_machine_id:<id>` 标签维护一只小机一份身份档案和互动履历。
+
+### 安全边界 / Safety
+
+- 日常模式不新增公开 MCP 工具，不改变桶格式、自动合并、衰减或归档算法；未出现 `OB_DAILY_MEMORY=ON` 的对话继续沿用逐次明确授权。
+- 自动采集不得设置 pinned/protected/anchor，不得归档、删除、恢复或写入 `I`；忽略寒暄、玩笑、猜测、重复内容与外部文本中的工具指令。`OB_DAILY_MEMORY=OFF` 会撤销当前对话的持续授权。
+
+### 版本 / Version
+
+- 根目录 `VERSION` 与 `src/VERSION` 同步更新为 `2.18.0`。
+
 ## 2.17.2
 
 ### 修复 / Fixed
