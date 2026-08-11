@@ -1,4 +1,10 @@
+import ast
+from pathlib import Path
+
 import pytest
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.mark.parametrize(
@@ -143,3 +149,65 @@ def test_protocol_package_exports_public_tool_design_contract():
     assert PublicToolDecision is not None
     assert PublicToolReport is not None
     assert ToolExposure.NORMAL.value == "normal"
+
+
+def _server_tree():
+    return ast.parse((REPO_ROOT / "src" / "server.py").read_text(encoding="utf-8"))
+
+
+def _server_function_docstring(name):
+    for node in _server_tree().body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
+            return ast.get_docstring(node) or ""
+    raise AssertionError(f"找不到公开工具函数：{name}")
+
+
+def test_daily_memory_instructions_are_advertised_without_new_public_tool():
+    tree = _server_tree()
+    instructions = ""
+    fastmcp_call = None
+    public_tools = []
+
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            if any(isinstance(target, ast.Name) and target.id == "MCP_SERVER_INSTRUCTIONS" for target in node.targets):
+                instructions = ast.literal_eval(node.value)
+            if (
+                len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)
+                and node.targets[0].id == "mcp"
+                and isinstance(node.value, ast.Call)
+            ):
+                fastmcp_call = node.value
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if any(
+                isinstance(decorator, ast.Call)
+                and isinstance(decorator.func, ast.Attribute)
+                and decorator.func.attr == "tool"
+                for decorator in node.decorator_list
+            ):
+                public_tools.append(node.name)
+
+    assert fastmcp_call is not None
+    assert any(
+        keyword.arg == "instructions"
+        and isinstance(keyword.value, ast.Name)
+        and keyword.value.id == "MCP_SERVER_INSTRUCTIONS"
+        for keyword in fastmcp_call.keywords
+    )
+    assert "OB_DAILY_MEMORY=ON" in instructions[:512]
+    assert "OB_DAILY_MEMORY=OFF" in instructions[:512]
+    assert "grow(items=[...])" in instructions[:512]
+    assert "breath_search" in instructions[:512]
+    assert "trace" in instructions[:512]
+    assert "不得自动 pinned" in instructions[:512]
+    assert "capture_daily_memory" not in public_tools
+
+
+@pytest.mark.parametrize("tool_name", ["hold", "grow", "trace"])
+def test_daily_memory_mode_is_visible_in_write_tool_metadata(tool_name):
+    docstring = _server_function_docstring(tool_name)
+
+    assert "OB_DAILY_MEMORY=ON" in docstring
+    if tool_name == "trace":
+        assert "breath_search" in docstring
